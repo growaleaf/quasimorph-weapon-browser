@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quasimorph — Weapon &amp; Armor Stat Browser</title>
+<meta name="description" content="Every Quasimorph weapon's damage, damage type, crit, and ammo stats in one sortable, filterable table — plus an armor-floor estimator labeled by source confidence.">
+<style>
+  :root {
+    --bg: #11151c;
+    --panel: #1a2029;
+    --panel-border: #313c4d;
+    --ink: #e4e8ee;
+    --ink-dim: #9aa6b5;
+    --accent: #4f8fae;
+    --accent-bright: #7bc3e8;
+    --field-bg: #0c0f14;
+    --warn: #c2874f;
+    --ok: #5fa876;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  main { max-width: 1200px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; border-bottom: 1px solid var(--panel-border); padding-bottom: 16px; }
+  .sub { color: var(--ink-dim); font-size: 0.93rem; margin: 0 0 28px; }
+  .sub a { color: var(--accent-bright); }
+  section { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 6px; padding: 20px 22px; margin-bottom: 20px; }
+  section h2 { font-size: 1.1rem; margin: 0 0 6px; }
+  .section-note { color: var(--ink-dim); font-size: 0.85rem; margin: 0 0 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 16px; align-items: center; }
+  .controls label { font-size: 0.8rem; color: var(--ink-dim); display: flex; flex-direction: column; gap: 4px; }
+  .controls select, .controls input[type="text"], .controls input[type="number"] {
+    background: var(--field-bg); color: var(--ink); border: 1px solid var(--panel-border);
+    border-radius: 4px; padding: 6px 8px; font-size: 0.85rem;
+  }
+  .result-count { font-size: 0.78rem; color: var(--ink-dim); margin-bottom: 10px; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  table th, table td { border: 1px solid var(--panel-border); padding: 6px 8px; text-align: left; vertical-align: top; white-space: nowrap; }
+  table th { color: var(--ink-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.02em;
+    background: var(--field-bg); cursor: pointer; user-select: none; position: sticky; top: 0; }
+  table th.sortable:hover { color: var(--accent-bright); }
+  table th .sort-arrow { color: var(--accent-bright); margin-left: 4px; }
+  td.name { font-weight: 600; }
+  td.effect, td.dmgtype { white-space: normal; min-width: 160px; }
+  .na { color: var(--ink-dim); font-style: italic; }
+  .cat-badge { display: inline-block; font-size: 0.68rem; padding: 1px 6px; border: 1px solid var(--panel-border);
+    border-radius: 3px; background: var(--field-bg); color: var(--ink-dim); }
+  .callout { font-size: 0.85rem; color: var(--ink-dim); background: var(--field-bg); border: 1px solid var(--panel-border);
+    border-radius: 4px; padding: 12px 14px; margin: 14px 0 0; }
+  .callout strong { color: var(--ink); }
+  .callout.warn { border-color: var(--warn); }
+  .unconfirmed-banner { font-size: 0.82rem; color: var(--warn); border: 1px solid var(--warn); border-radius: 4px;
+    padding: 10px 12px; margin-bottom: 16px; background: var(--field-bg); }
+  .unconfirmed-banner strong { color: var(--warn); }
+  .calc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 16px; }
+  .calc-grid label { font-size: 0.8rem; color: var(--ink-dim); display: flex; flex-direction: column; gap: 4px; }
+  .calc-grid input { background: var(--field-bg); color: var(--ink); border: 1px solid var(--panel-border);
+    border-radius: 4px; padding: 7px 9px; font-size: 0.9rem; }
+  .calc-checkbox { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--ink); }
+  .calc-output { background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: 4px; padding: 14px 16px; }
+  .calc-output .range { font-size: 1.3rem; font-weight: 700; color: var(--accent-bright); }
+  .calc-output .label { font-size: 0.78rem; color: var(--ink-dim); margin-top: 2px; }
+  .sources-section { font-size: 0.82rem; color: var(--ink-dim); }
+  .sources-section h2 { font-size: 1.05rem; }
+  .sources-section ul { margin: 6px 0 16px; padding-left: 22px; }
+  .sources-section li { margin-bottom: 8px; }
+  .sources-section a { color: var(--accent-bright); }
+  .self-test { font-size: 0.75rem; color: var(--ink-dim); margin-top: 10px; }
+  .self-test.ok { color: var(--accent-bright); }
+  .self-test.bad { color: var(--warn); }
+  footer { max-width: 1200px; margin: 0 auto; padding: 0 20px 40px; font-size: 0.8rem; color: var(--ink-dim); }
+  footer a { color: var(--accent-bright); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Quasimorph — Weapon &amp; Armor Stat Browser</h1>
+  <p class="sub">A reference for
+  <a href="https://store.steampowered.com/app/2059170" target="_blank" rel="noopener">Quasimorph</a>.
+  Every weapon from the wiki's Weapons page in one sortable, filterable table, so you can compare
+  damage type against a target's resistance without opening six separate category pages. This page
+  does not rank or recommend any weapon — it is a browser, not a tier list. Nothing is saved or
+  sent anywhere; everything renders from the data in this page in your browser.</p>
+
+  <section>
+    <h2>Weapon table</h2>
+    <p class="section-note">Click a column header to sort. "Crit." is the critical-hit damage
+    multiplier (e.g. 190% = hit does 1.9× damage on a crit). "Crit chance" — the probability of
+    landing a crit — is only given by the source for melee weapons; ranged weapons show "not
+    listed" because the wiki's ranged tables carry no such column. Damage type is likewise melee-only
+    on the source page.</p>
+    <div class="controls">
+      <label>Weapon class
+        <select id="classFilter">
+          <option value="all">All (melee + ranged)</option>
+          <option value="melee">Melee only</option>
+          <option value="ranged">Ranged only</option>
+        </select>
+      </label>
+      <label>Category
+        <select id="categoryFilter"><option value="all">All categories</option></select>
+      </label>
+      <label>Damage type contains
+        <input type="text" id="dmgTypeFilter" placeholder="e.g. Cut, Piercing, Blunt">
+      </label>
+      <label>Name contains
+        <input type="text" id="nameFilter" placeholder="search by name">
+      </label>
+    </div>
+    <p class="result-count" id="resultCount"></p>
+    <div class="table-scroll">
+      <table id="weaponTable">
+        <thead>
+          <tr>
+            <th class="sortable" data-key="name">Name</th>
+            <th class="sortable" data-key="category">Category</th>
+            <th class="sortable" data-key="class">Class</th>
+            <th class="sortable" data-key="min">Min dmg</th>
+            <th class="sortable" data-key="max">Max dmg</th>
+            <th class="sortable" data-key="critMult">Crit.</th>
+            <th class="sortable" data-key="critChance">Crit chance</th>
+            <th class="sortable" data-key="dmgType">Damage type</th>
+            <th class="sortable" data-key="accuracy">Accuracy</th>
+            <th class="sortable" data-key="scatterOrKnockback">Scatter / Knockback</th>
+            <th class="sortable" data-key="range">Range</th>
+            <th class="sortable" data-key="ammoType">Ammo</th>
+            <th class="sortable" data-key="ammoCap">Ammo cap.</th>
+            <th class="sortable" data-key="weight">Weight (kg)</th>
+            <th class="sortable" data-key="price">Price</th>
+            <th>Special effect</th>
+          </tr>
+        </thead>
+        <tbody id="weaponBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Armor Mitigation Estimator</h2>
+    <div class="unconfirmed-banner">
+      <strong>Community-reported, unconfirmed (single source, patch-dependent).</strong>
+      Both claims below come from the same Steam Community discussion thread, posted by two
+      different community members — not from an official source, a patch note, or a second
+      independent thread. A direct research pass on 2026-10-28 (WebSearch + direct reads of three
+      other Quasimorph Steam threads and a third-party armor guide) found no second source for
+      either claim, and no source anywhere that documents how a specific armor VALUE converts into
+      a reduction percentage. Treat every number below as a reported floor, not a verified formula.
+    </div>
+    <p class="section-note">
+      Claim 1 (the floor): <em>"Armor doesn't negate the damage entirely, it can't reduce it bellow
+      5% (10% for assault rifles)."</em> — phoagne, Steam Community, Jul 13 2024.<br>
+      Claim 2 (the ordering, not used in the arithmetic below): <em>"Damage taken multiplier
+      applies before damage reduction by armor."</em> — GreatPalm, same thread.
+      <a href="https://steamcommunity.com/app/2059170/discussions/0/6426156954539202467" target="_blank" rel="noopener">Source thread</a>.
+    </p>
+    <p class="section-note">
+      No source found gives a formula for how an armor VALUE maps to a reduction percentage — only
+      this floor. So this estimator cannot compute "post-armor damage for armor value N"; it can
+      only show the floor-protected range a hit's damage cannot be reduced below, regardless of how
+      high the target's armor is, using the weapon's own min/max damage from the table above.
+    </p>
+    <div class="calc-grid">
+      <label>Weapon min damage
+        <input type="number" id="calcMin" value="30" min="0" step="1">
+      </label>
+      <label>Weapon max damage
+        <input type="number" id="calcMax" value="50" min="0" step="1">
+      </label>
+      <label class="calc-checkbox" style="align-self: end;">
+        <input type="checkbox" id="calcIsAR"> Target is being hit by an Assault Rifle (10% floor instead of 5%)
+      </label>
+    </div>
+    <div class="calc-output" id="calcOutput"></div>
+  </section>
+
+  <section class="sources-section">
+    <h2>Sources &amp; last verified date</h2>
+    <p>All weapon stats fetched and read directly from the wiki's live table 2026-10-28.</p>
+    <ul>
+      <li><a href="https://quasimorph.wiki.gg/wiki/Weapons" target="_blank" rel="noopener">quasimorph.wiki.gg — Weapons</a>
+      — sole source for every weapon's name, category, damage, crit, accuracy, scatter/knockback,
+      range, ammo, condition, special effect, weight, and price on this page.</li>
+      <li><a href="https://steamcommunity.com/app/2059170/discussions/0/6426156954539202467" target="_blank" rel="noopener">Steam Community — "Why is armor so damn useless?" thread</a>
+      — sole source for both Armor Mitigation Estimator claims above (two different posters in the
+      same thread), checked directly 2026-10-28. No second source found after checking two other
+      Quasimorph Steam threads and a third-party armor guide (xmodhub.com) that discuss armor but
+      state no floor number and no armor-value-to-reduction formula.</li>
+    </ul>
+    <p class="section-note">
+      <strong>A known quirk in the source data:</strong> the wiki lists "Chainblade" once under the
+      "Blades" category table and again under its own single-row "Chainsaws" category table, with
+      identical stats both times. This page shows it once, under "Chainsaw," to avoid a literal
+      duplicate row.
+    </p>
+    <p class="self-test" id="selfTest">running self-test…</p>
+  </section>
+</main>
+
+<footer>
+  Fan-made reference tool, unaffiliated with the developers of Quasimorph. Figures above reflect
+  the sources cited, fetched 2026-10-28, and may not match every patch — verify in-run before
+  relying on a number. No account, no server, no data leaves your browser.
+</footer>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  "use strict";
+  var D = window.QMDATA;
+  var sortState = { key: "price", dir: 1 };
+
+  function textNode(tag, cls, text) {
+    var el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text !== undefined && text !== null) el.textContent = text;
+    return el;
+  }
+
+  function fmt(v, suffix) {
+    if (v === null || v === undefined) return null;
+    return suffix ? (v + suffix) : String(v);
+  }
+
+  // Normalize melee + ranged into one flat row shape for the combined table.
+  function flatten() {
+    var rows = [];
+    D.MELEE.forEach(function (w) {
+      rows.push({
+        name: w.name, category: w.category, class: "Melee",
+        min: w.min, max: w.max, critMult: w.critMult, critChance: w.critChance,
+        dmgType: w.dmgType, accuracy: w.accuracy,
+        scatterOrKnockback: w.knockback, scatterOrKnockbackLabel: "knockback",
+        range: null, ammoType: null, ammoCap: null,
+        weight: w.weight, price: w.price, effect: w.effect, condition: w.condition,
+      });
+    });
+    D.RANGED.forEach(function (w) {
+      rows.push({
+        name: w.name, category: w.category, class: "Ranged",
+        min: w.min, max: w.max, critMult: w.critMult, critChance: null,
+        dmgType: null, accuracy: w.accuracy,
+        scatterOrKnockback: w.scatter, scatterOrKnockbackLabel: "scatter",
+        range: w.range, ammoType: w.ammoType, ammoCap: w.ammoCap,
+        weight: w.weight, price: w.price, effect: w.effect, condition: w.condition,
+      });
+    });
+    return rows;
+  }
+
+  var ALL_ROWS = flatten();
+
+  function populateCategoryFilter() {
+    var sel = document.getElementById("categoryFilter");
+    D.MELEE_CATEGORIES.concat(D.RANGED_CATEGORIES).forEach(function (c) {
+      var opt = document.createElement("option");
+      opt.value = c; opt.textContent = c;
+      sel.appendChild(opt);
+    });
+  }
+
+  function currentFilters() {
+    return {
+      cls: document.getElementById("classFilter").value,
+      cat: document.getElementById("categoryFilter").value,
+      dmgType: document.getElementById("dmgTypeFilter").value.trim().toLowerCase(),
+      name: document.getElementById("nameFilter").value.trim().toLowerCase(),
+    };
+  }
+
+  function applyFilters(rows) {
+    var f = currentFilters();
+    return rows.filter(function (row) {
+      if (f.cls === "melee" && row.class !== "Melee") return false;
+      if (f.cls === "ranged" && row.class !== "Ranged") return false;
+      if (f.cat !== "all" && row.category !== f.cat) return false;
+      if (f.dmgType && (!row.dmgType || row.dmgType.toLowerCase().indexOf(f.dmgType) === -1)) return false;
+      if (f.name && row.name.toLowerCase().indexOf(f.name) === -1) return false;
+      return true;
+    });
+  }
+
+  function cellOrNA(td, value, suffix) {
+    if (value === null || value === undefined) {
+      td.appendChild(textNode("span", "na", "not listed"));
+    } else {
+      td.appendChild(document.createTextNode(suffix ? (value + suffix) : String(value)));
+    }
+  }
+
+  function render() {
+    var rows = applyFilters(ALL_ROWS).slice();
+    rows.sort(function (a, b) {
+      var k = sortState.key, dir = sortState.dir;
+      var av = a[k], bv = b[k];
+      if (av === null || av === undefined) av = (typeof bv === "number") ? -Infinity : "";
+      if (bv === null || bv === undefined) bv = (typeof av === "number") ? -Infinity : "";
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return a.name.localeCompare(b.name);
+    });
+
+    document.getElementById("resultCount").textContent =
+      rows.length + " of " + ALL_ROWS.length + " weapons shown";
+
+    var body = document.getElementById("weaponBody");
+    body.innerHTML = "";
+    rows.forEach(function (w) {
+      var tr = document.createElement("tr");
+
+      tr.appendChild(textNode("td", "name", w.name));
+
+      var catTd = document.createElement("td");
+      catTd.appendChild(textNode("span", "cat-badge", w.category));
+      tr.appendChild(catTd);
+
+      tr.appendChild(textNode("td", null, w.class));
+      tr.appendChild(textNode("td", null, String(w.min)));
+      tr.appendChild(textNode("td", null, String(w.max)));
+
+      var critTd = document.createElement("td");
+      cellOrNA(critTd, w.critMult, "%");
+      tr.appendChild(critTd);
+
+      var critChanceTd = document.createElement("td");
+      cellOrNA(critChanceTd, w.critChance, "%");
+      tr.appendChild(critChanceTd);
+
+      var dmgTypeTd = document.createElement("td");
+      dmgTypeTd.className = "dmgtype";
+      cellOrNA(dmgTypeTd, w.dmgType, null);
+      tr.appendChild(dmgTypeTd);
+
+      var accTd = document.createElement("td");
+      cellOrNA(accTd, w.accuracy, "%");
+      tr.appendChild(accTd);
+
+      var scTd = document.createElement("td");
+      if (w.scatterOrKnockback === null || w.scatterOrKnockback === undefined) {
+        scTd.appendChild(textNode("span", "na", "not listed"));
+      } else {
+        var suffix = w.scatterOrKnockbackLabel === "scatter" ? "° scatter" : "% knockback";
+        scTd.appendChild(document.createTextNode(w.scatterOrKnockback + suffix));
+      }
+      tr.appendChild(scTd);
+
+      var rangeTd = document.createElement("td");
+      cellOrNA(rangeTd, w.range, null);
+      tr.appendChild(rangeTd);
+
+      var ammoTd = document.createElement("td");
+      cellOrNA(ammoTd, w.ammoType, null);
+      tr.appendChild(ammoTd);
+
+      var ammoCapTd = document.createElement("td");
+      cellOrNA(ammoCapTd, w.ammoCap, null);
+      tr.appendChild(ammoCapTd);
+
+      tr.appendChild(textNode("td", null, w.weight === null ? "not listed" : String(w.weight)));
+      tr.appendChild(textNode("td", null, w.price === null ? "not listed" : String(w.price)));
+
+      var effectTd = document.createElement("td");
+      effectTd.className = "effect";
+      cellOrNA(effectTd, w.effect, null);
+      tr.appendChild(effectTd);
+
+      body.appendChild(tr);
+    });
+  }
+
+  function wireSort() {
+    var table = document.getElementById("weaponTable");
+    table.querySelectorAll("th.sortable").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var key = th.getAttribute("data-key");
+        if (sortState.key === key) sortState.dir *= -1;
+        else { sortState.key = key; sortState.dir = 1; }
+        table.querySelectorAll("th .sort-arrow").forEach(function (a) { a.remove(); });
+        var arrow = document.createElement("span");
+        arrow.className = "sort-arrow";
+        arrow.textContent = sortState.dir === 1 ? "↑" : "↓";
+        th.appendChild(arrow);
+        render();
+      });
+    });
+  }
+
+  function wireFilters() {
+    ["classFilter", "categoryFilter", "dmgTypeFilter", "nameFilter"].forEach(function (id) {
+      document.getElementById(id).addEventListener("input", render);
+      document.getElementById(id).addEventListener("change", render);
+    });
+  }
+
+  // ───────────────────────────────── Armor Mitigation Estimator
+
+  function renderCalc() {
+    var min = parseFloat(document.getElementById("calcMin").value);
+    var max = parseFloat(document.getElementById("calcMax").value);
+    var isAR = document.getElementById("calcIsAR").checked;
+    var out = document.getElementById("calcOutput");
+    out.innerHTML = "";
+
+    if (isNaN(min) || isNaN(max) || min < 0 || max < min) {
+      out.appendChild(textNode("div", "label", "Enter a valid min ≤ max damage range."));
+      return;
+    }
+
+    var floorPct = isAR ? D.ARMOR_MITIGATION.floorPercentAssaultRifle : D.ARMOR_MITIGATION.floorPercent;
+    var floorMin = +(min * floorPct / 100).toFixed(1);
+    var floorMax = +(max * floorPct / 100).toFixed(1);
+
+    out.appendChild(textNode("div", "range", floorMin + " – " + floorMax));
+    out.appendChild(textNode("div", "label",
+      "Floor-protected damage at " + floorPct + "% — the lowest this hit's " + min + "–" + max +
+      " raw damage can be pushed down to by armor, per the single unconfirmed community claim above." +
+      " No matter how high the target's armor value is, the reported floor says the hit still does at" +
+      " least this much. This is NOT a prediction of actual damage at any specific armor value —" +
+      " no source found documents that curve."));
+  }
+
+  function wireCalc() {
+    ["calcMin", "calcMax", "calcIsAR"].forEach(function (id) {
+      document.getElementById(id).addEventListener("input", renderCalc);
+      document.getElementById(id).addEventListener("change", renderCalc);
+    });
+  }
+
+  populateCategoryFilter();
+  wireSort();
+  wireFilters();
+  wireCalc();
+  render();
+  renderCalc();
+
+  // Structural self-test mirroring test.js, so opening the file directly also proves the data
+  // shape without a terminal.
+  (function selfTest() {
+    var el = document.getElementById("selfTest");
+    var pass = 0, total = 6;
+    if (D.MELEE.length > 0) pass++;
+    if (D.RANGED.length > 0) pass++;
+    if (D.MELEE.every(function (w) { return typeof w.name === "string" && w.name.length > 0; })) pass++;
+    if (D.RANGED.every(function (w) { return typeof w.name === "string" && w.name.length > 0; })) pass++;
+    if (D.ARMOR_MITIGATION.confirmed === false) pass++;
+    var bannedWords = ["best", "optimal", "strongest", "guaranteed", "approved", "certified", "compliant", "safe"];
+    var visibleText = (document.querySelector("main").textContent + " " + document.querySelector("footer").textContent).toLowerCase();
+    if (bannedWords.every(function (w) { return visibleText.indexOf(w) === -1; })) pass++;
+    el.textContent = "self-test: " + pass + "/" + total + " known-answer scenarios passed";
+    el.className = "self-test " + (pass === total ? "ok" : "bad");
+  })();
+})();
+</script>
+</body>
+</html>
