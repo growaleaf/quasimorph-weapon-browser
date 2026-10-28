@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://growaleaf.github.io/quasimorph-weapon-browser/sitemap.xml
